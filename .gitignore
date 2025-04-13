@@ -1,3 +1,11 @@
+# JWN additions
+
+## RDS object files
+*.rds
+
+## h5 initial files
+*.h5
+
 # History files
 .Rhistory
 .Rapp.history
