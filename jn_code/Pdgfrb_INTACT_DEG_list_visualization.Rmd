@@ -1,0 +1,175 @@
+---
+title: "Pdgfrb-INTACT DEG List Visualization"
+author: "Jonathan Nelson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: true
+    number_sections: yes
+    theme: bootstrap
+    df_print: paged
+    code_folding: hide
+    highlight: pygments
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Packages
+
+```{r load new packages, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE}
+
+if (!require("knitr")) {install.packages("knitr"); require("knitr")}
+if (!requireNamespace('BiocManager', quietly = TRUE)) {install.packages('BiocManager'); require("BiocManager")}
+if (!require("dplyr")) {install.packages("dplyr"); require("dplyr")}
+if (!require("stringr")) {install.packages("stringr"); require("stringr")}
+if (!require("Seurat")) {install.packages("Seurat"); require("Seurat")}
+if (!require("sctransform")) {install.packages("sctransform"); require("sctransform")}
+if (!require("glmGamPoi")) {BiocManager::install('glmGamPoi'); require("glmGamPoi")}
+if (!require("patchwork")) {install.packages("patchwork"); require("patchwork")}
+if (!require("ggplot2")) {install.packages("ggplot2"); require("ggplot2")}
+if (!require("EnhancedVolcano")) {BiocManager::install('EnhancedVolcano'); require("EnhancedVolcano")}
+if (!require("DESeq2")) {BiocManager::install('DESeq2'); require("DESeq2")}
+if (!require("tidyverse")) {install.packages("tidyverse"); require("tidyverse")}
+if (!require("RColorBrewer")) {install.packages("RColorBrewer"); require("RColorBrewer")}
+if (!require("car")) {install.packages("car"); require("car")}
+if (!require("openxlsx")) {install.packages("openxlsx"); require("openxlsx")}
+if (!require("readxl")) {install.packages("readxl"); require("readxl")}
+if (!require("ggrepel")) {install.packages("ggrepel"); require("ggrepel")}
+if (!require("gghighlight")) {install.packages("gghighlight"); require("gghighlight")}
+if (!require("ggpmisc")) {install.packages("ggpmisc"); require("ggpmisc")}
+if (!require("data.table")) {install.packages("data.table"); require("data.table")}
+if (!require("here")) {install.packages("here"); require("here")}
+
+here()
+```
+
+# Introduction
+
+This document is used to visualize the Pdgfrb-INTACT DEG list in the context of the mouse interstitial dataset and the mouse whole kidney dataset.
+
+# Load Pdgfrb-INTACT DEG List
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+list <- read.xlsx(here("datasets", "SpatialGenomics_List_v2.xlsx"), sheet = 1)
+
+list
+
+genelist <- list$Gene
+
+#genelist <- head(genelist, 2)
+
+```
+
+
+# Expression in **Mouse Interstial** Dataset
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=TRUE, fig.align = 'center'}
+
+GFP <- readRDS(here("datasets", "GFP.clean.060424.rds"))
+
+DefaultAssay(GFP) <- "RNA"
+
+DimPlot(GFP)
+
+head(GFP@meta.data)
+
+```
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=TRUE, fig.align = 'center', fig.width=10}
+
+
+for (i in genelist) {
+  if (!(i %in% rownames(GFP))) {
+    message(paste(i, "not found – skipping"))
+    next
+     }
+  
+  p1 <- VlnPlot(GFP, features = i, group.by = "Special", pt.size = 0.1) +
+  theme(axis.line = element_line(size = 1, colour = "black"),
+        text = element_text(size=20),
+        axis.text.x = element_text(color = "black", size = 16, angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none"
+        ) + xlab("") 
+
+  p2 <- FeaturePlot(GFP, features = i, order = TRUE) +
+  ylab("UMAP 2") +
+  xlab("UMAP 1") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20),
+    axis.line = element_line(size = 1, colour = "black"),
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x = element_text(margin = margin(t = 10)),  # Move x-axis label closer
+    axis.title.y = element_text(margin = margin(r = 10)),  # Move y-axis label closer
+    text = element_text(size = 20)
+  )
+  
+p3 <- p1 + p2 + plot_layout(ncol = 2, widths = c(1, 1))
+
+print(p3)
+}
+
+```
+
+# Expression in Mouse **Whole Kidney** Dataset
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=TRUE, fig.align = 'center'}
+
+Kidney <- readRDS(here("datasets", "GSE253448_PTACE2KO.rds"))
+
+DefaultAssay(Kidney) <- "RNA"
+
+DimPlot(Kidney)
+
+head(Kidney@meta.data)
+
+```
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=TRUE, fig.align = 'center', fig.width=16}
+
+
+for (i in genelist) {
+  if (!(i %in% rownames(Kidney))) {
+    message(paste(i, "not found – skipping"))
+    next
+     }
+  
+  p1 <- VlnPlot(Kidney, features = i, pt.size = 0.1) +
+  theme(axis.line = element_line(size = 1, colour = "black"),
+        text = element_text(size=20),
+        axis.text.x = element_text(color = "black", size = 16, angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none"
+        ) + xlab("") 
+
+  p2 <- FeaturePlot(Kidney, features = i, order = TRUE) +
+  ylab("UMAP 2") +
+  xlab("UMAP 1") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20),
+    axis.line = element_line(size = 1, colour = "black"),
+    axis.text = element_blank(),          # Remove axis text
+    axis.ticks = element_blank(),         # Optional: Remove axis ticks
+    text = element_text(size = 20)
+  ) 
+
+p3 <- p1 + p2 + plot_layout(ncol = 2, widths = c(1, 1))
+  
+print(p3)
+}
+
+```
+
+# Session Info
+
+```{r sessioninfo, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+sessionInfo()
+
+```
+

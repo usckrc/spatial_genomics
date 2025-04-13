@@ -1,0 +1,140 @@
+---
+title: "Pdgfrb-INTACT DEG List for Spatial Genomics"
+author: "Jonathan Nelson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: true
+    number_sections: yes
+    theme: bootstrap
+    df_print: paged
+    code_folding: hide
+    highlight: pygments
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Packages
+
+```{r load new packages, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE}
+
+if (!require("knitr")) {install.packages("knitr"); require("knitr")}
+if (!requireNamespace('BiocManager', quietly = TRUE)) {install.packages('BiocManager'); require("BiocManager")}
+if (!require("dplyr")) {install.packages("dplyr"); require("dplyr")}
+if (!require("stringr")) {install.packages("stringr"); require("stringr")}
+if (!require("Seurat")) {install.packages("Seurat"); require("Seurat")}
+if (!require("sctransform")) {install.packages("sctransform"); require("sctransform")}
+if (!require("glmGamPoi")) {BiocManager::install('glmGamPoi'); require("glmGamPoi")}
+if (!require("patchwork")) {install.packages("patchwork"); require("patchwork")}
+if (!require("ggplot2")) {install.packages("ggplot2"); require("ggplot2")}
+if (!require("EnhancedVolcano")) {BiocManager::install('EnhancedVolcano'); require("EnhancedVolcano")}
+if (!require("DESeq2")) {BiocManager::install('DESeq2'); require("DESeq2")}
+if (!require("tidyverse")) {install.packages("tidyverse"); require("tidyverse")}
+if (!require("RColorBrewer")) {install.packages("RColorBrewer"); require("RColorBrewer")}
+if (!require("car")) {install.packages("car"); require("car")}
+if (!require("openxlsx")) {install.packages("openxlsx"); require("openxlsx")}
+if (!require("readxl")) {install.packages("readxl"); require("readxl")}
+if (!require("ggrepel")) {install.packages("ggrepel"); require("ggrepel")}
+if (!require("gghighlight")) {install.packages("gghighlight"); require("gghighlight")}
+if (!require("ggpmisc")) {install.packages("ggpmisc"); require("ggpmisc")}
+if (!require("data.table")) {install.packages("data.table"); require("data.table")}
+if (!require("here")) {install.packages("here"); require("here")}
+
+here()
+```
+
+# Introduction
+
+This analysis is to identify unique DEGs for each interstial cell population in order to perform spatial transcriptomics on the Spatial Genomics platform. 
+
+# Load Seurat Objects
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+GFP <- readRDS(here("datasets", "GFP.clean.060424.rds"))
+
+DefaultAssay(GFP) <- "RNA"
+
+DimPlot(GFP)
+
+head(GFP@meta.data)
+
+```
+
+
+# Create Unique Population DEG List
+
+## FindAllMarkers
+
+Starting with min.pct = .25 and logfc.threshold = .5
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+df <- FindAllMarkers(GFP, only.pos = TRUE, min.pct = 0.25, logfc.threshold = .5)
+
+df
+
+```
+
+## Save Full DEG List
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+date <- format(Sys.time(), '%y%M%d ')
+
+write.xlsx(df, file = here("outputs", paste0("Pdgfrb-INTACT_DEG_list_RAW_", date, ".xlsx")), 
+           sheetName = "Pdgfrb-INTACT_DEG_list", 
+           col.names = TRUE, row.names = FALSE, append = FALSE)
+
+```
+
+## Filter DEG List
+
+1) Filter for unique genes (Some genes might have multiple entries for some populations) <br>
+2) Filter out genes that start with "Gm" or end with "Rik" (These are likely non-coding genes or pseudogenes) <br>
+3) Filter for top 10 genes per population <br>
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+df_unique <- df %>%
+  distinct(gene, .keep_all = TRUE)
+
+df_filtered <- df_unique %>%
+  filter(!str_starts(gene, "Gm") & !str_ends(gene, "Rik"))
+
+df_top10 <- df_filtered  %>%
+  group_by(cluster) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+```
+
+# Final DEG List
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+df_top10
+
+```
+
+## Save DEG List
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+write.xlsx(df_top10, file = here("outputs", paste0("Pdgfrb-INTACT_DEG_list_", date, ".xlsx")), 
+           sheetName = "Pdgfrb-INTACT_DEG_list", 
+           col.names = TRUE, row.names = FALSE, append = FALSE)
+
+```
+
+# Session Info
+
+```{r sessioninfo, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+sessionInfo()
+
+```
+

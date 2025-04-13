@@ -1,0 +1,206 @@
+---
+title: "Peri-INTACT_FISHseq Psuedobulk"
+author: "Jonathan Nelson"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document: 
+    toc: yes
+    toc_depth: 3
+    toc_float: true
+    number_sections: yes
+    theme: bootstrap
+    df_print: paged
+    code_folding: hide
+    highlight: pygments
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load Packages
+
+```{r load new packages, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE}
+
+if (!require("knitr")) {install.packages("knitr"); require("knitr")}
+if (!requireNamespace('BiocManager', quietly = TRUE)) {install.packages('BiocManager'); require("BiocManager")}
+if (!require("dplyr")) {install.packages("dplyr"); require("dplyr")}
+if (!require("stringr")) {install.packages("stringr"); require("stringr")}
+if (!require("Seurat")) {install.packages("Seurat"); require("Seurat")}
+if (!require("sctransform")) {install.packages("sctransform"); require("sctransform")}
+if (!require("glmGamPoi")) {BiocManager::install('glmGamPoi'); require("glmGamPoi")}
+if (!require("patchwork")) {install.packages("patchwork"); require("patchwork")}
+if (!require("ggplot2")) {install.packages("ggplot2"); require("ggplot2")}
+if (!require("EnhancedVolcano")) {BiocManager::install('EnhancedVolcano'); require("EnhancedVolcano")}
+if (!require("DESeq2")) {BiocManager::install('DESeq2'); require("DESeq2")}
+if (!require("tidyverse")) {install.packages("tidyverse"); require("tidyverse")}
+if (!require("RColorBrewer")) {install.packages("RColorBrewer"); require("RColorBrewer")}
+if (!require("car")) {install.packages("car"); require("car")}
+if (!require("openxlsx")) {install.packages("openxlsx"); require("openxlsx")}
+if (!require("readxl")) {install.packages("readxl"); require("readxl")}
+if (!require("ggrepel")) {install.packages("ggrepel"); require("ggrepel")}
+if (!require("gghighlight")) {install.packages("gghighlight"); require("gghighlight")}
+if (!require("ggpmisc")) {install.packages("ggpmisc"); require("ggpmisc")}
+if (!require("data.table")) {install.packages("data.table"); require("data.table")}
+if (!require("here")) {install.packages("here"); require("here")}
+
+here()
+```
+
+
+# Introduction
+
+This analysis aims to determine the cell-specific expression of extracellular matrix (ECM) proteins within the kidney.
+
+# Notes on Analysis (1/10/25)
+
+Within the Kidney Stroma, the following ECM genes exhibit differential expression: **Csgalnact** (fibroblasts), **Dcn** (perivascular fibroblasts), **Ust** (fibroblasts), **Vcan** (inner medulla fibroblasts), **Chsy3** (fibroblasts), and **Cspg4** (contractile cells).
+
+Within the Whole Kidney, the following ECM genes exhibit differential expression: **Chst11** (all but the distal nephron), **Csgalnact1** (endothelium and proximal tubule), **Chst7** (late proximal tubule), **Ust** (fibroblasts and podocytes), **Bgn** (fibroblasts and endothelial cells), **Dse** (contractile cells), and **Chsy3** (fibroblasts and endothelial cells).
+
+# Load Seurat Objects
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+GFP <- readRDS(here("Outputs", "GFP.clean.060424.rds"))
+
+DefaultAssay(GFP) <- "RNA"
+
+DimPlot(GFP)
+
+head(GFP@meta.data)
+
+```
+
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+df <- FindAllMarkers(GFP, only.pos = TRUE, min.pct = 0.25, logfc.threshold = .5)
+
+df
+
+df_unique <- df %>%
+  distinct(gene, .keep_all = TRUE)
+
+df_filtered <- df_unique %>%
+  filter(!str_starts(gene, "Gm") & !str_ends(gene, "Rik"))
+
+df_top10 <- df_filtered  %>%
+  group_by(cluster) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+FeaturePlot(GFP, "Wt1", order = T)
+
+```
+
+
+# Expression in Mouse Interstial Dataset
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=TRUE, fig.align = 'center', fig.width=10}
+
+list <- read.xlsx(here("SpatialGenomics_List_v2.xlsx"), sheet = 1)
+
+genelist <- list$Gene
+
+genelist <- head(genelist, 2)
+
+for (i in genelist) {
+  if (!(i %in% rownames(GFP))) {
+    message(paste(i, "not found – skipping"))
+     }
+  
+  
+  p1 <- VlnPlot(GFP, features = i, group.by = "Special", pt.size = 0.1) + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)) 
+
+  p2 <- FeaturePlot(GFP, features = i, order = TRUE) 
+
+  p3 <- wrap_plots(p1, p2)
+  
+  print(p3)
+}
+
+
+
+```
+
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+PB <- AverageExpression(GFP, 
+                           group.by = c("Special"), 
+                           assays = 'RNA', 
+                           slot = "counts",
+                           return.seurat = FALSE)
+
+PB <- PB$RNA
+PB <- as.matrix(PB)  # Convert to matrix
+PB <- as.data.frame(PB) # Convert from matrix to dataframe 
+
+
+PB2 <- PB %>%
+  rownames_to_column(var = "Gene") %>%  # Convert row names to a column
+  rowwise() %>%
+  mutate(Max_Value = max(c_across(-Gene))) %>%  # Exclude the "Gene" column
+  ungroup() %>% 
+  mutate(Percent_Rank = percent_rank(Max_Value))
+
+
+PB3 <- PB2 %>%
+ select(Gene, Percent_Rank) 
+
+df3 <- inner_join(df, PB3, by = c("gene" = "Gene"))
+
+
+
+
+```
+
+
+```{r echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+
+DefaultAssay(GFP) <- "SCT"
+df2 <- FindAllMarkers(GFP, only.pos = TRUE, min.pct = 0.25, logfc.threshold = .5)
+
+# Convert row names to a column
+df4 <- df %>% rownames_to_column(var = "Rowname")
+df5 <- df2 %>% rownames_to_column(var = "Rowname")
+
+# Perform inner join by "Rowname"
+df6 <- inner_join(df4, df5, by = "Rowname")
+
+# Optionally, remove "Rowname" column and restore row names
+df7<- df6 %>% column_to_rownames(var = "Rowname")
+
+ggplot(df7, aes(x = avg_log2FC.x, y = avg_log2FC.y)) +
+  geom_point() +  # Adds dots
+  labs(x = "Average log2FC (RNA)", y = "Average log2FC (SCT)") +
+  theme_minimal() +  # Use minimal theme
+  ggtitle("Dotplot of RNA vs SCT") + # Title
+  theme_classic()
+
+df8 <- df7 %>% rownames_to_column(var = "Gene")
+
+# Calculate the absolute difference between avg_log2FC.x and avg_log2FC.y
+top_genes <- df8 %>%
+  mutate(Diff = abs(avg_log2FC.x - avg_log2FC.y)) %>%  # Calculate the difference
+  select(Gene, avg_log2FC.x, avg_log2FC.y, Diff) %>%  # Select relevant columns
+  arrange(desc(Diff)) %>%  # Sort by largest difference
+  head(50)  # Get the top genes with the largest differences
+
+# Print the result
+print(top_genes)
+
+
+```
+
+# Session Info
+
+```{r sessioninfo, echo=TRUE, warning=FALSE, error=FALSE, message=FALSE, fig.align = 'center'}
+
+sessionInfo()
+
+```
+
